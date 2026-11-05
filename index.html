@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Gemini English Practice</title>
+  <title>Gemini English Practice (Voice & Model Tier)</title>
   <style>
     :root {
       --bg: #f8fafc;
       --card-bg: #ffffff;
       --border: #cbd5e1;
       --primary: #2563eb;
+      --danger: #dc2626;
       --text: #1e293b;
     }
     body {
@@ -24,7 +25,7 @@
     }
     .container {
       width: 100%;
-      max-width: 720px;
+      max-width: 760px;
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
@@ -51,6 +52,15 @@
       font-weight: 500;
     }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button.recording {
+      background: var(--danger);
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
     input, select, textarea {
       padding: 0.55rem;
       border: 1px solid var(--border);
@@ -115,19 +125,47 @@
       border-radius: 6px;
       margin: 0.5rem 0;
     }
+    .mode-toggle {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      font-size: 0.88rem;
+    }
   </style>
 </head>
 <body>
 
 <div class="container">
-  <!-- Key Management -->
-  <div class="card flex-row" style="justify-content: space-between;">
+  <!-- Key, Model Tier & Voice Toggle Settings -->
+  <div class="card flex-row" style="justify-content: space-between; gap: 0.75rem;">
+    <!-- API Key Input -->
     <div class="flex-row">
-      <label><strong>API Key:</strong></label>
-      <input type="password" id="apiKey" placeholder="AIzaSy..." style="width: 240px;" />
+      <label><strong>Key:</strong></label>
+      <input type="password" id="apiKey" placeholder="AIzaSy..." style="width: 150px;" />
       <button onclick="saveKey()">Save</button>
     </div>
-    <span id="keyStatus" style="font-size: 0.85rem; color: #64748b;">Not saved</span>
+
+    <!-- Tier / Model Selector -->
+    <div class="flex-row">
+      <label><strong>Tier:</strong></label>
+      <select id="modelTier" onchange="saveModelChoice()">
+        <option value="gemini-2.0-flash-lite">Free / Lite (Fastest & Light)</option>
+        <option value="gemini-2.5-flash" selected>Standard (Balanced 2.5 Flash)</option>
+        <option value="gemini-2.5-pro">Pro / Advanced (Deep Exam Prep)</option>
+      </select>
+    </div>
+
+    <!-- Voice Checkbox -->
+    <div class="mode-toggle">
+      <label style="cursor: pointer;">
+        <input type="checkbox" id="voiceToggle" checked /> 
+        🔊 Auto-read
+      </label>
+    </div>
   </div>
 
   <!-- Navigation Tabs -->
@@ -140,7 +178,7 @@
   <div id="mainMode" class="card">
     <div class="flex-row" style="margin-bottom: 0.75rem;">
       <button onclick="fetchRandomTopic()" id="randomBtn">🎲 Get Random Topic/Keyword</button>
-      <label style="margin-left: auto;"><strong>Mode:</strong></label>
+      <label style="margin-left: auto;"><strong>Focus:</strong></label>
       <select id="practiceMode">
         <option value="test">Exam / Test Prep (Grammar & Expressions)</option>
         <option value="deep">Deep Conversation (Thought-Provoking)</option>
@@ -149,14 +187,21 @@
 
     <div class="keyword-display" id="keywordBox">Click the button above to generate a keyword topic.</div>
 
-    <textarea id="keywordReply" placeholder="Type your response or thoughts on this topic..."></textarea>
-    <div style="margin-top: 0.5rem; text-align: right;">
-      <button onclick="sendKeywordResponse()" id="keywordSubmitBtn">Send to Gemini</button>
+    <textarea id="keywordReply" placeholder="Type or click '🎙️ Speak' to dictate your answer..."></textarea>
+    
+    <div class="flex-row" style="margin-top: 0.5rem; justify-content: space-between;">
+      <button type="button" id="micBtnKeyword" onclick="toggleSpeech('keywordReply', 'micBtnKeyword')" style="background: #475569;">
+        🎙️ Speak
+      </button>
+      <button onclick="sendKeywordResponse()" id="keywordSubmitBtn">Send</button>
     </div>
 
     <div id="keywordFeedback" style="margin-top: 1rem; display: none;">
-      <strong>Gemini's Response:</strong>
-      <div id="feedbackText" class="msg gemini" style="width: 100%; box-sizing: border-box; margin-top: 0.5rem;"></div>
+      <div class="flex-row" style="justify-content: space-between; margin-bottom: 0.25rem;">
+        <strong>Gemini's Response:</strong>
+        <button onclick="speakText(document.getElementById('feedbackText').innerText)" style="background: #475569; padding: 0.25rem 0.6rem; font-size: 0.85rem;">🔊 Listen</button>
+      </div>
+      <div id="feedbackText" class="msg gemini" style="width: 100%; box-sizing: border-box;"></div>
     </div>
   </div>
 
@@ -165,7 +210,7 @@
     <div style="margin-bottom: 0.75rem;">
       <label><strong>Define Persona:</strong></label>
       <input type="text" id="personaInput" 
-             placeholder="e.g. Mexican friend in Vancouver who worked with me before at a café" 
+             placeholder="e.g. Mexican friend in Vancouver who worked with me before" 
              value="A Mexican friend in Vancouver who worked with me before"
              style="width: 100%; box-sizing: border-box; margin-top: 0.35rem;" />
     </div>
@@ -173,33 +218,48 @@
     <div class="chat-box" id="chatHistory"></div>
 
     <div class="flex-row">
-      <textarea id="chatInput" placeholder="Say something in English..." style="flex: 1; min-height: 50px;"></textarea>
+      <textarea id="chatInput" placeholder="Type or speak in English..." style="flex: 1; min-height: 50px;"></textarea>
+      <button type="button" id="micBtnChat" onclick="toggleSpeech('chatInput', 'micBtnChat')" style="height: 50px; background: #475569;">🎙️ Speak</button>
       <button onclick="sendRoleplayMessage()" style="height: 50px;" id="chatSendBtn">Send</button>
-      <button onclick="resetRoleplay()" style="height: 50px; background: #64748b;">Reset</button>
+      <button onclick="resetRoleplay()" style="height: 50px; background: #94a3b8;">Reset</button>
     </div>
   </div>
 </div>
 
 <script>
   let chatHistory = [];
+  let recognition = null;
+  let isRecording = false;
 
-  // Key storage
+  // Initialize Speech Recognition
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+  }
+
+  // Key & Tier settings storage
   window.onload = () => {
-    const saved = localStorage.getItem("gemini_key");
-    if (saved) {
-      document.getElementById("apiKey").value = saved;
-      document.getElementById("keyStatus").innerText = "Key loaded";
-      document.getElementById("keyStatus").style.color = "green";
-    }
+    const savedKey = localStorage.getItem("gemini_key");
+    if (savedKey) document.getElementById("apiKey").value = savedKey;
+
+    const savedModel = localStorage.getItem("gemini_model");
+    if (savedModel) document.getElementById("modelTier").value = savedModel;
   };
 
   function saveKey() {
     const val = document.getElementById("apiKey").value.trim();
     if (val) {
       localStorage.setItem("gemini_key", val);
-      document.getElementById("keyStatus").innerText = "Saved";
-      document.getElementById("keyStatus").style.color = "green";
+      alert("API key saved locally!");
     }
+  }
+
+  function saveModelChoice() {
+    const selected = document.getElementById("modelTier").value;
+    localStorage.setItem("gemini_model", selected);
   }
 
   function getStoredKey() {
@@ -208,19 +268,90 @@
     return key;
   }
 
+  function getSelectedModel() {
+    return document.getElementById("modelTier").value || "gemini-2.5-flash";
+  }
+
   function switchTab(mode) {
+    stopCurrentSpeech();
     document.getElementById("mainMode").style.display = mode === 'main' ? 'block' : 'none';
     document.getElementById("roleplayMode").style.display = mode === 'roleplay' ? 'block' : 'none';
     document.getElementById("tabBtn1").classList.toggle('active', mode === 'main');
     document.getElementById("tabBtn2").classList.toggle('active', mode === 'roleplay');
   }
 
-  // Core Gemini Call
+  // Voice Input (Speech-to-Text)
+  function toggleSpeech(targetInputId, btnId) {
+    if (!recognition) {
+      alert("Web Speech API is not supported in this browser. Please use Chrome or Safari.");
+      return;
+    }
+
+    const btn = document.getElementById(btnId);
+    const target = document.getElementById(targetInputId);
+
+    if (isRecording) {
+      recognition.stop();
+      isRecording = false;
+      btn.classList.remove("recording");
+      btn.innerText = "🎙️ Speak";
+      return;
+    }
+
+    const initialText = target.value;
+    recognition.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          target.value = (initialText ? initialText + " " : "") + e.results[i][0].transcript;
+        } else {
+          interim += e.results[i][0].transcript;
+        }
+      }
+    };
+
+    recognition.onerror = () => {
+      isRecording = false;
+      btn.classList.remove("recording");
+      btn.innerText = "🎙️ Speak";
+    };
+
+    recognition.onend = () => {
+      isRecording = false;
+      btn.classList.remove("recording");
+      btn.innerText = "🎙️ Speak";
+    };
+
+    recognition.start();
+    isRecording = true;
+    btn.classList.add("recording");
+    btn.innerText = "⏹️ Stop";
+  }
+
+  // Voice Output (Text-to-Speech)
+  function speakText(text) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    
+    const cleanText = text.replace(/[*#_`]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = "en-US";
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function stopCurrentSpeech() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (recognition && isRecording) recognition.stop();
+  }
+
+  // Gemini API Request (Dynamically targets the selected model tier)
   async function callGemini(contents, systemInstruction = "") {
     const apiKey = getStoredKey();
     if (!apiKey) return null;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const model = getSelectedModel();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const payload = { contents };
 
     if (systemInstruction) {
@@ -244,19 +375,21 @@
     return data.candidates[0].content.parts[0].text;
   }
 
-  // Function 1: Random Topic Fetching & Answering
+  // Function 1 Actions
   async function fetchRandomTopic() {
+    stopCurrentSpeech();
     const btn = document.getElementById("randomBtn");
     btn.disabled = true;
     document.getElementById("keywordBox").innerText = "Generating prompt...";
 
-    const prompt = "Generate a single random, interesting conversation keyword or statement for English practice (e.g., 'Remote Work vs Office Life', 'Is travel actually educational?', or 'Artificial Intelligence in art'). Return ONLY the topic/question phrase, without quotation marks.";
+    const prompt = "Generate a single interesting, engaging discussion topic or controversial prompt suitable for English conversation or test prep. Return ONLY the phrase/question without quotes or explanation.";
     
     try {
       const res = await callGemini([{ role: "user", parts: [{ text: prompt }] }]);
       document.getElementById("keywordBox").innerText = res.trim();
       document.getElementById("keywordReply").value = "";
       document.getElementById("keywordFeedback").style.display = "none";
+      if (document.getElementById("voiceToggle").checked) speakText(res.trim());
     } catch (e) {
       document.getElementById("keywordBox").innerText = "Error: " + e.message;
     } finally {
@@ -265,32 +398,31 @@
   }
 
   async function sendKeywordResponse() {
+    stopCurrentSpeech();
     const topic = document.getElementById("keywordBox").innerText;
     const answer = document.getElementById("keywordReply").value.trim();
     const mode = document.getElementById("practiceMode").value;
     const btn = document.getElementById("keywordSubmitBtn");
 
     if (!answer) {
-      alert("Please enter a reply first.");
+      alert("Please write or speak an answer first.");
       return;
     }
 
     btn.disabled = true;
     document.getElementById("keywordFeedback").style.display = "block";
-    document.getElementById("feedbackText").innerText = "Thinking...";
+    document.getElementById("feedbackText").innerText = "Evaluating...";
 
-    let systemPrompt = "";
-    if (mode === "test") {
-      systemPrompt = "You are an English exam prep evaluator (like IELTS or TOEFL). Analyze the user's answer to the given topic. 1) Correct grammatical mistakes and suggest natural, higher-level vocabulary. 2) Provide a polished version of their answer. 3) Ask a follow-up test-style question.";
-    } else {
-      systemPrompt = "You are an intellectual, curious conversational partner. The user is sharing their view on a topic. Respond warmly, challenge their ideas constructively, bring in new angles or counterpoints, and start a deep, thought-provoking dialogue.";
-    }
+    const systemPrompt = mode === "test"
+      ? "You are an English test examiner (IELTS/TOEFL style). Review the user's spoken or written answer. 1) Correct grammatical mistakes and suggest natural vocabulary. 2) Provide a better sample response. 3) Ask a related follow-up question."
+      : "You are a thoughtful conversation partner. React directly to the user's ideas, challenge or expand their perspective, and ask an engaging follow-up question to keep a deep dialogue going.";
 
-    const userMessage = `Topic: "${topic}"\nMy response: "${answer}"`;
+    const userMessage = `Topic: "${topic}"\nCandidate's Answer: "${answer}"`;
 
     try {
       const feedback = await callGemini([{ role: "user", parts: [{ text: userMessage }] }], systemPrompt);
       document.getElementById("feedbackText").innerText = feedback;
+      if (document.getElementById("voiceToggle").checked) speakText(feedback);
     } catch (e) {
       document.getElementById("feedbackText").innerText = "Error: " + e.message;
     } finally {
@@ -298,7 +430,7 @@
     }
   }
 
-  // Function 2: Custom Roleplay
+  // Function 2 Actions (Roleplay)
   function appendMessage(role, text) {
     const box = document.getElementById("chatHistory");
     const div = document.createElement("div");
@@ -309,6 +441,7 @@
   }
 
   async function sendRoleplayMessage() {
+    stopCurrentSpeech();
     const persona = document.getElementById("personaInput").value.trim();
     const input = document.getElementById("chatInput");
     const text = input.value.trim();
@@ -322,12 +455,13 @@
 
     chatHistory.push({ role: "user", parts: [{ text }] });
 
-    const systemPrompt = `You must roleplay fully as this character: ${persona}. Stay strictly in character, speak naturally in English, keep your replies conversational and appropriately paced, and reference your shared background naturally where relevant.`;
+    const systemPrompt = `You must roleplay strictly as: ${persona}. Talk naturally, keep responses conversational (1-3 sentences like real speech), and stay completely in character.`;
 
     try {
       const reply = await callGemini(chatHistory, systemPrompt);
       appendMessage("gemini", reply);
       chatHistory.push({ role: "model", parts: [{ text: reply }] });
+      if (document.getElementById("voiceToggle").checked) speakText(reply);
     } catch (e) {
       appendMessage("gemini", "Error: " + e.message);
     } finally {
@@ -336,6 +470,7 @@
   }
 
   function resetRoleplay() {
+    stopCurrentSpeech();
     chatHistory = [];
     document.getElementById("chatHistory").innerHTML = "";
   }
